@@ -1,0 +1,6 @@
+build_*
+*.log
+*__pycache__*
+projects/
+*.exe
+Thumbs.db
