@@ -3,7 +3,7 @@
 from cx_Freeze import setup, Executable
 
 executables = [Executable('gui.py',
-                          targetName='NIResearcher.exe',
+                          targetName='Terrvey.exe',
                           base='Win32GUI')]
 
 # модули которые исключаются из сборки
@@ -15,8 +15,7 @@ zip_include_packages = []
 # файлы которые будут скопированы вместе с модулями
 include_files = [
     'ui',
-    'media',
-    '2rd stage'
+    'media'
 ]
 
 # модули, которые будут скопированы
@@ -35,7 +34,7 @@ options = {
         'includes': includes,
         'packages': packages,
         'zip_include_packages': zip_include_packages,
-        'build_exe': 'build_NIResearcher',
+        'build_exe': 'build_Terrvey',
         'include_files': include_files,
     }
 }

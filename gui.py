@@ -430,9 +430,9 @@ class MainApp(QMainWindow):
 
     def initUI(self):
         self.show()
-        # Задаем такой размер, чтобы автоматически получить самую компактуню конфигурацию
+        # Задаем такой размер, чтобы автоматически получить самую компактуную конфигурацию
         self.resize(1,1)
-        self.setWindowTitle('TerrNII Survey v0.1 - '+self.DB.path)
+        self.setWindowTitle('Terrvey v0.1 - '+self.DB.path)
         self.setWindowIcon(QIcon('media/icon.png'))
 
         # Статус бар
