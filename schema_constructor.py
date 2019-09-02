@@ -113,7 +113,7 @@ class SchemaConstructor(QWidget):
 
     def addQuestion(self):
         wid = SchemaBrick()
-        self.tabWidget.addTab(wid, '1')
+        self.tabWidget.addTab(wid, '?')
 
     def removeQuestion(self):
         self.tabWidget.removeTab(self.tabWidget.currentIndex())

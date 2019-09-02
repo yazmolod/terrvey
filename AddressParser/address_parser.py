@@ -4,9 +4,9 @@ from selenium.webdriver.common.keys import Keys
 from selenium.common.exceptions import NoSuchElementException
 import urllib.parse as urlparse
 
-from PyQt5.QtCore import *
-from PyQt5.QtGui import *
-from PyQt5.QtWidgets import *
+from PyQt5.QtCore import QThread, QObject, QAbstractTableModel, Qt
+from PyQt5.QtGui import QColor, QBrush
+from PyQt5.QtWidgets import QApplication, QFileDialog, QMessageBox, QWidget
 from PyQt5.uic import loadUi
 
 import sys

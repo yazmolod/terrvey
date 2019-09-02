@@ -1,6 +1,9 @@
 # coding: utf-8
 
 from cx_Freeze import setup, Executable
+from datetime import datetime
+
+dt_string = datetime.now().strftime("%d-%m-%Y %H.%M")
 
 executables = [Executable('address_parser.py',
                           targetName='AddressParser.exe',
@@ -32,7 +35,7 @@ options = {
         'includes': includes,
         'packages': packages,
         'zip_include_packages': zip_include_packages,
-        'build_exe': 'build_AddressParser',
+        'build_exe': 'build_AddressParser/%s' % (dt_string),
         'include_files': include_files,
     }
 }

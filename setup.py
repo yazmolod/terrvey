@@ -2,6 +2,10 @@
 
 from cx_Freeze import setup, Executable
 
+from datetime import datetime
+
+dt_string = datetime.now().strftime("%d/%m/%Y %H.%M")
+
 executables = [Executable('gui.py',
                           targetName='Terrvey.exe',
                           base='Win32GUI')]
@@ -34,7 +38,7 @@ options = {
         'includes': includes,
         'packages': packages,
         'zip_include_packages': zip_include_packages,
-        'build_exe': 'build_Terrvey',
+        'build_exe': 'build_Terrvey/(%s)' % (dt_string)',
         'include_files': include_files,
     }
 }
