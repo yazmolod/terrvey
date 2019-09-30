@@ -38,7 +38,7 @@ options = {
         'includes': includes,
         'packages': packages,
         'zip_include_packages': zip_include_packages,
-        'build_exe': 'build_Terrvey/(%s)' % (dt_string)',
+        'build_exe': 'build_Terrvey/(%s)' % (dt_string),
         'include_files': include_files,
     }
 }
