@@ -73,6 +73,13 @@
        </spacer>
       </item>
       <item>
+       <widget class="QPushButton" name="importButton">
+        <property name="text">
+         <string>Импорт</string>
+        </property>
+       </widget>
+      </item>
+      <item>
        <widget class="QPushButton" name="exportButton">
         <property name="text">
          <string>Экспорт</string>

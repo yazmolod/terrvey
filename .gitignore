@@ -4,3 +4,4 @@ build_*
 projects/
 *.exe
 Thumbs.db
+*.sublime*
