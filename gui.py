@@ -12,7 +12,8 @@ import json
 from data_base import DBController
 from csv_parser import CSVParser
 from recognizer import ImageRecognizer
-import common
+from schema_constructor import SchemaConstructor
+
 
 class QuestionWidget(QWidget):
 
@@ -114,7 +115,8 @@ class QuestionWidget(QWidget):
 
     def get_values(self):
         if self.question_type in ('matrix', 'mmatrix'):
-            values = [[] for i in range(common.MATRIX_WIDTH[self.objectName()])]
+            # Тут нужно что-то починить
+            values = [[] for i in range(self.parent().parent().parent().PROJECT['MATRIX_WIDTH'][self.objectName()])]
         else:
             values = []
         for i in self.answer_items:
@@ -183,6 +185,7 @@ class QuestionWidget(QWidget):
                 i.setPlainText("")
         for i in self.button_groups:
             i.setExclusive(True)
+
 
 class ImageRecognizerSetup(QDialog):
 
@@ -332,7 +335,7 @@ class ImageRecognizerSetup(QDialog):
 
     def init_data_structure(self):
         self.data_structure = []
-        for item in common.JSON:
+        for item in self.parent().PROJECT['STRUCTURE']:
             if 'text' not in item['type']:
                 name = item['table_name']
                 question = item['quest']
@@ -374,7 +377,7 @@ class ImportCSVDialog(QDialog):
 
     def process(self):
         path, options = self.getOptions()
-        parser = CSVParser(path)
+        parser = CSVParser(path, self.parent().PROJECT['STRUCTURE'])
         self.progressBar.setMaximum(parser.csv_row_count-options['have_header'])
         counter = 0
         for row in parser.parse_all(**options):
@@ -419,8 +422,8 @@ class MainApp(QMainWindow):
                          (resolution.height() / 2) - (startDialog.frameSize().height() / 2))
         open_btn = startDialog.buttonBox.button(QDialogButtonBox.Open)
         save_btn = startDialog.buttonBox.button(QDialogButtonBox.Save)
-        open_btn.clicked.connect(self.startOpenFileDialog)
-        save_btn.clicked.connect(self.startSaveFileDialog)
+        open_btn.clicked.connect(self.openProjectDialog)
+        save_btn.clicked.connect(self.newProjectDialog)
         ret = startDialog.exec_()
         if ret == QDialog.Accepted:
             loadUi('ui\\MainWorkflow.ui', self)
@@ -430,7 +433,7 @@ class MainApp(QMainWindow):
 
     def initUI(self):
         self.show()
-        # Задаем такой размер, чтобы автоматически получить самую компактуную конфигурацию
+        # Задаем такой размер, чтобы автоматически получить самую компактную конфигурацию
         self.resize(1,1)
         self.setWindowTitle('Terrvey v0.1 - '+self.DB.path)
         self.setWindowIcon(QIcon('media/icon.png'))
@@ -449,7 +452,7 @@ class MainApp(QMainWindow):
 
         # Добавляем в QStackedWidget все заготовки формата .ui
         self.question_widgets = []
-        for i in common.JSON:
+        for i in self.PROJECT['STRUCTURE']:
             if 'Quest' in i['table_name']:
                 wid = QuestionWidget(i)
                 self.question_widgets.append(wid)
@@ -464,9 +467,9 @@ class MainApp(QMainWindow):
         self.AgeBox.setValidator(validator)
 
         # Загрузка данных в комбобоксы
-        self.DistrictBox.addItems(common.DEFAULT_VALUES['Districts'])
-        self.GenderBox.addItems(common.DEFAULT_VALUES['Genders'])
-        self.SourceBox.addItems(common.DEFAULT_VALUES['Sources'])
+        self.DistrictBox.addItems(self.PROJECT['DEFAULT_VALUES']['Districts'])
+        self.GenderBox.addItems(self.PROJECT['DEFAULT_VALUES']['Genders'])
+        self.SourceBox.addItems(self.PROJECT['DEFAULT_VALUES']['Sources'])
 
         # Первоначальная загрузка данных из БД по текущему респонденту
         self.load_values()
@@ -519,7 +522,6 @@ class MainApp(QMainWindow):
             QMessageBox.information(self, "Импорт CSV", "Импорт отменен")
         self.update_window()
 
-    @common.debugger
     def process_image(self, path):
         # Считывает данные с изображения по заранее заготовленному
         # конфигу, хранящемся в self.ir_settings
@@ -538,7 +540,6 @@ class MainApp(QMainWindow):
         else:
             QMessageBox.warning(self, "Ошибка", "Не задан файл-конфиг для распознания", QMessageBox.Ok)
 
-    @common.debugger
     def process_recognized_values(self, raw_values):
         result_values = {}
         for key in raw_values:
@@ -549,7 +550,7 @@ class MainApp(QMainWindow):
                     result_values[table_name] = {}
             else:
                 table_name, table_column = key, None
-            for j in common.JSON:
+            for j in self.PROJECT['STRUCTURE']:
                 # развитие инфы на стандартную схему
                 if j['table_name'] == table_name and j.get('table_column', None) == table_column:
                     answers = j['answers']
@@ -709,19 +710,28 @@ class MainApp(QMainWindow):
         self.Stack.setCurrentIndex(self.Stack.currentIndex() - 1)
         self.questSpinBox.setValue(self.questSpinBox.value() - 1)
 
-    def startOpenFileDialog(self):
+    def openProjectDialog(self):
         fname = QFileDialog.getOpenFileName(
-            self, 'Открыть базу данных', '.', "База данных (*.sqlite)")[0]
+            self, 'Открыть проект опроса', '.', "Проект Terrvey (*.trv)")[0]
         if fname:
-            self.DB = DBController(fname, )
+            with open(fname, 'r', encoding='utf-8') as file:
+                self.PROJECT = json.load(file)
+                self.PROJECT['PROJECT_PATH'] = fname
+                self.PROJECT['DATABASE_PATH'] = fname.replace('.trv', '__DB.sqlite')
+                self.DB = DBController(self.PROJECT)
         else:
             sys.exit()
 
-    def startSaveFileDialog(self):
-        fname = QFileDialog.getSaveFileName(
-            self, 'Создать базу данных', '.', "База данных (*.sqlite)")[0]
-        if fname:
-            self.DB = DBController(fname)
+    def newProjectDialog(self):
+        schema = SchemaConstructor()
+        schema.exec_()
+        if schema:
+            project_path = schema.project_path
+            with open(project_path, 'r', encoding='utf-8') as file:
+                self.PROJECT = json.load(file)
+                self.PROJECT['PROJECT_PATH'] = project_path
+                self.PROJECT['DATABASE_PATH'] = project_path.replace('.trv', '__DB.sqlite')
+                self.DB = DBController(self.PROJECT)
         else:
             sys.exit()
 

@@ -1,14 +1,14 @@
 import csv
-import common
 
 
 class CSVParser:
 
-    def __init__(self, csv_path):
+    def __init__(self, csv_path, structure):
         with open(csv_path, encoding='utf-8') as f:
             self.csv_row_count = sum(1 for line in f)         
         self.csv_file = open(csv_path, encoding='utf-8')
         self.csv_reader = csv.reader(self.csv_file)
+        self.STRUCTURE = structure
 
     def split_multi_answer(self, answer):
         # если в ответе имеется точка с запятой то будет кирдык
@@ -19,7 +19,7 @@ class CSVParser:
 
     def parse_row(self, row):
         result = {'Respondents':{'Source':'Онлайн'}}
-        for item in common.JSON:
+        for item in self.STRUCTURE:
             # матрицы
             if item['type'] == 'matrix' or item['type'] == 'mmatrix':
                 item_result = [[] for j in range(len(item['answer_options']))]

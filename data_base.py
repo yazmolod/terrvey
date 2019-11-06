@@ -4,14 +4,14 @@
 import sqlite3
 import re
 from itertools import chain
-import common
 
 
 class DBController:
     """docstring for DBController"""
 
-    def __init__(self, db_path):
-        self.path = db_path
+    def __init__(self, project):
+        self.PROJECT = project
+        self.path = self.PROJECT['DATABASE_PATH']
         self.connection = sqlite3.connect(self.path, timeout=15)
         self.cursor = self.connection.cursor()
         # Foreign keys не работают с on delete cascade
@@ -19,7 +19,7 @@ class DBController:
         # подробнее https://stackoverflow.com/questions/4477269/how-to-make-on-delete-cascade-work-in-sqlite-3-7-4
         self.cursor.execute("PRAGMA foreign_keys = ON")
         self.quest_table_names = []
-        for i in common.JSON:
+        for i in self.PROJECT['STRUCTURE']:
             table_name = i.get('table_name', None)
             if 'Quest' in table_name:
                 self.quest_table_names.append(table_name)
@@ -60,7 +60,7 @@ class DBController:
     def create_quest_tables(self):
         """Создает в БД таблицы для каждого вопроса на основе файла-конфига"""
         statements = []
-        for i in common.JSON:
+        for i in self.PROJECT['STRUCTURE']:
             name = i['table_name']
             if 'Quest' in name:
                 if i['type'] == 'matrix' or i['type'] == 'mmatrix':
@@ -91,7 +91,7 @@ class DBController:
                     'AnswerText' TEXT,
                     FOREIGN KEY('RespondentId') REFERENCES 'Respondents'('RespondentId') ON UPDATE CASCADE ON DELETE CASCADE)
                     """.format(i['table_name'])
-            statements.append(msg)
+                statements.append(msg)
         for statement in statements:
             self.cursor.execute(statement)
         self.hard_commit()
@@ -150,8 +150,8 @@ class DBController:
         respondent_values = self.cursor.fetchall()[0]
         result_values['Respondents'] = {respondent_columns[i]:respondent_values[i] for i in range(len(respondent_columns))}
         for table_name in self.quest_table_names:
-            if common.TYPES[table_name] in ('matrix', 'mmatrix'):
-                result_values[table_name] = [[] for i in range(common.MATRIX_WIDTH[table_name])]
+            if self.PROJECT['TYPES'][table_name] in ('matrix', 'mmatrix'):
+                result_values[table_name] = [[] for i in range(self.PROJECT['MATRIX_WIDTH'][table_name])]
             else:
                 result_values[table_name] = []
             self.cursor.execute('SELECT * FROM {} WHERE RespondentId = {}'.format (table_name, current_resp))
@@ -159,9 +159,9 @@ class DBController:
             for table_value in table_values:
                 #пропускаем AnsId и RespId
                 value = table_value[2:]
-                if common.TYPES[table_name] in ('opt+', 'mopt+'):
+                if self.PROJECT['TYPES'][table_name] in ('opt+', 'mopt+'):
                     result_values[table_name].append(value)
-                elif common.TYPES[table_name] in ('matrix', 'mmatrix'):
+                elif self.PROJECT['TYPES'][table_name] in ('matrix', 'mmatrix'):
                     for i in range(len(value)):
                         if value[i]:
                             result_values[table_name][i].append(value[i])

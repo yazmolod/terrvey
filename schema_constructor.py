@@ -65,7 +65,7 @@ class SchemaBrick(QWidget):
 
     def tableNameChanged(self, text):
         stackedWidget = self.parent()
-        i = stackedWidget.count()-1
+        i = stackedWidget.count() - 1
         stackedWidget.parent().setTabText(i, text)
 
     def answersChanged(self, value):
@@ -132,8 +132,8 @@ class SchemaBrick(QWidget):
 
     def setValues(self, values):
         for i in self.questionTypes:
-            if i[1]==values['type'].strip('+'):
-                current_type = i[0]  
+            if i[1] == values['type'].strip('+'):
+                current_type = i[0]
         index = self.questionTypeComboBox.findText(current_type)
         self.questionTypeComboBox.setCurrentIndex(index)
         self.answersCountSpinBox.setValue(len(values['answers']))
@@ -146,9 +146,11 @@ class SchemaBrick(QWidget):
         for iAnswer in range(len(values['answers'])):
             self.answers[iAnswer].setText(values['answers'][iAnswer])
         for iAnswerOption in range(len(values['answer_options'])):
-            self.columns[iAnswerOption].setText(values['answer_options'][iAnswerOption])
+            self.columns[iAnswerOption].setText(
+                values['answer_options'][iAnswerOption])
 
-class SchemaConstructor(QWidget):
+
+class SchemaConstructor(QDialog):
     def __init__(self):
         super().__init__()
         loadUi('ui\\SchemaConstructor.ui', self)
@@ -174,26 +176,60 @@ class SchemaConstructor(QWidget):
             wid = self.tabWidget.widget(i)
             schema.append(wid.getValues())
         fname = QFileDialog.getSaveFileName(
-            self, 'Создать проект опроса', '.', "База данных (*.json)")[0]
+            self, 'Создать опрос', '.', "(*.trv)")[0]
         if fname:
+            # файл проекта
+            terrvey_project = {              
+                'TYPES': {i['table_name']: i['type'] for i in schema},
+                'MATRIX_WIDTH': {i['table_name']: len(i['answer_options']) for i in schema if 'answer_options' in i},
+                'STRUCTURE': schema,
+                # ПАРАМЕТРЫ ПО УМОЛЧАНИЮ НЕОБХОДИМО РАСХАРДКОДИТЬ!
+                'DEFAULT_VALUES': {
+                    "Districts": [
+                        "Неизвестно",
+                        "Самарский",
+                        "Ленинский",
+                        "Октябрьский",
+                        "Железнодорожный",
+                        "Советский",
+                        "Промышленный",
+                        "Кировский",
+                        "Красноглинский",
+                        "Куйбышевский"
+
+                    ],
+
+                    "Genders": [
+                        "Неизвестно",
+                        "Мужской",
+                        "Женский"
+                    ],
+
+                    "Sources": [
+                        "Бумага",
+                        "Онлайн"
+                    ]
+                },
+            }
             with open(fname, 'w', encoding='utf-8') as file:
-                json.dump(schema, file, ensure_ascii=False)
+                json.dump(terrvey_project, file, ensure_ascii=False)
+            self.project_path = fname
+            self.accept()
 
     def importProject(self):
         fname = QFileDialog.getOpenFileName(
-            self, 'Открыть проект опроса', '.', "База данных (*.json)")[0]
+            self, 'Открыть проект', '.', "(*.trv)")[0]
         if fname:
             with open(fname, 'r', encoding='utf-8') as file:
-                schema = json.load(file)
+                schema = json.load(file)['STRUCTURE']
             self.tabWidget.clear()
             for q in schema:
                 wid = self.addQuestion()
                 wid.setValues(q)
 
 
-
 if __name__ == '__main__':
     app = QApplication(sys.argv)
     test = SchemaConstructor()
-    test.show()
+    test.exec_()
     sys.exit(app.exec_())

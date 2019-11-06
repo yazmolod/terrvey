@@ -3,7 +3,6 @@ import numpy as np
 import math
 import os
 import copy
-import common
 
 
 class SideRecognizeError(Exception):
@@ -48,15 +47,15 @@ class ImageRecognizer:
         '''Функция для определения анкеты с веб-камеры'''
         cap = cv2.VideoCapture(0)
         while(cap.isOpened()):
-            cv2.waitKey(10)
+            k = cv2.waitKey(33)
             ret, frame = cap.read()
             pts = self.find_corners(frame)
-            self.preview(frame, pts)
-            if cv2.waitKey(1) & 0xFF == ord('q'):
+            self.preview(frame, pts, window_title='Esc for quit, Space for commit')
+            if k==27:       #Esc
                 break
-            if cv2.waitKey(32):
-                self.set_src_img2(frame)
-                return self.get_values
+            elif k==32:     #Space
+                 self.set_src_img2(frame)
+                 return self.get_values
         cap.release()
         cv2.destroyAllWindows()
 
@@ -155,7 +154,7 @@ class ImageRecognizer:
         cv2.destroyAllWindows()
         return splitting_regions
 
-    def preview(self, image, pts=None, contours=None, mark_pts=True, rects=None):
+    def preview(self, image, pts=None, contours=None, mark_pts=True, rects=None, window_title='Preview'):
         '''Отрисовывает контуры и точки, показывает в отдельном окне результат
         РЕЗУЛЬТАТ ПОЛУЧАЕТСЯ ТОЛЬКО НА ЦВЕТНЫХ (BGR) ИЗОБРАЖЕНИЯХ'''
         try:
@@ -174,9 +173,9 @@ class ImageRecognizer:
                            (0, 0, 255), -1)
                 if mark_pts:
                     cv2.putText(img, str(i), p, cv2.FONT_HERSHEY_SIMPLEX, 2, (0,0,200), 8)
-        cv2.namedWindow('Preview', cv2.WINDOW_NORMAL)
-        cv2.resizeWindow('Preview', 800, 600)
-        cv2.imshow('Preview', img)
+        cv2.namedWindow(window_title, cv2.WINDOW_NORMAL)
+        cv2.resizeWindow(window_title, 800, 600)
+        cv2.imshow(window_title, img)
         #cv2.waitKey(0)
         #cv2.destroyAllWindows()
 
@@ -346,5 +345,5 @@ if __name__ == '__main__':
         2348,
         1030
       ]]
-    rec = ImageRecognizer(example_path=r"2rd stage\example_image\B.jpg", regions=r)
+    rec = ImageRecognizer(regions=r)
     rec.start_capturing()
