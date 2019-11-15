@@ -1,6 +1,7 @@
 import sys
 import os
 import traceback
+import ast
 
 from PyQt5.QtCore import *
 from PyQt5.QtGui import *
@@ -13,6 +14,7 @@ from data_base import DBController
 from csv_parser import CSVParser
 from recognizer import ImageRecognizer
 from schema_constructor import SchemaConstructor
+import data_export
 
 
 class QuestionWidget(QWidget):
@@ -186,6 +188,26 @@ class QuestionWidget(QWidget):
         for i in self.button_groups:
             i.setExclusive(True)
 
+class IRSideChoice(QDialog):
+    def __init__(self, parent, sides):
+        super(IRSideChoice, self).__init__(parent)
+        self.setWindowTitle('Выберите сторону анкеты')
+        layout = QHBoxLayout(self)
+        self.side = None
+        for side in sides:
+            btn = QPushButton(side, self)
+            shortcut = QShortcut(side, self)
+            btn.side = side
+            shortcut.side = side
+            btn.clicked.connect(self.choiced)
+            shortcut.activated.connect(self.choiced)
+            layout.addWidget(btn)
+        self.exec_()
+
+    def choiced(self):
+        self.side = self.sender().side
+        self.accept()
+
 
 class ImageRecognizerSetup(QDialog):
 
@@ -209,7 +231,7 @@ class ImageRecognizerSetup(QDialog):
         if ir_settings:
             self.ir_settings = ir_settings
         else:
-            self.ir_settings = {}
+            self.ir_settings = {'Regions':{}}
         self.update_settings_view()
         self.draw_mode = False
         # контур для марок
@@ -222,42 +244,40 @@ class ImageRecognizerSetup(QDialog):
     def init_signals(self):
         self.filePathButton.clicked.connect(self.selectFile)
         self.filePathText.textChanged.connect(self.load_image)
-        self.rectSizeSlider.valueChanged.connect(lambda x: self.set_rect_size(x))        
+        self.rectSizeSlider.valueChanged.connect(self.set_rect_size)        
         self.deleteLastRectButton.clicked.connect(self.delete_last_rect)
         self.deleteAllRectButton.clicked.connect(self.delete_all_rect)
         self.deleteAllRectButton.clicked.connect(self.delete_all_rect)
         self.regexpRespText.textChanged.connect(self.set_resp_regexp)
         self.regexpSideText.textChanged.connect(self.set_side_regexp)
         self.filePathText.textChanged.connect(self.path_changed)
-        self.saveSettingsButton.clicked.connect(self.save_settings)
-        self.loadSettingsButton.clicked.connect(self.load_settigns)
+        self.acceptButton.clicked.connect(self.setup_done)
+        self.textEdit.textChanged.connect(self.text_changed)
 
-    def save_settings(self):
-        path = QFileDialog.getSaveFileName(
-        self, 'Сохранить настройки для считывания', '.', "Файл (*.json)")[0]
-        if path:
-            with open(path, 'w') as f:
-                json.dump(self.ir_settings, f)
+    def text_changed(self):
+        try:
+            self.ir_settings['Regions'] = ast.literal_eval(self.textEdit.toPlainText())
+            self.textEdit.setStyleSheet("background-color: #0fff8b;")
+        except SyntaxError:
+            self.textEdit.setStyleSheet("background-color: #ff848a;")
 
-    def load_settigns(self):
-        path = QFileDialog.getOpenFileName(
-        self, 'Открыть настройки для считывания', '.', "Файл (*.json)")[0]
-        if path:
-            with open(path) as f:
-                self.ir_settings = json.load(f)
-                self.update_settings_view()
-
+    def setup_done(self):
+        self.ir_settings['Field_size'] = self.rect_size
+        self.ir_settings['Side_re'] = self.side_regexp
+        self.ir_settings['Respondent_re'] = self.resp_regexp
+        self.accept()
 
     def path_changed(self, t):
         self.set_resp_regexp(t)
         self.set_side_regexp(t)
 
     def set_resp_regexp(self, t):
-        regexp = self.regexpRespText.text()
-        path = self.filePathText.text().split('/')[-1]
-        if path:
+        self.resp_regexp = self.regexpRespText.text()
+        path = self.filePathText.text()
+        filename = os.path.basename(path)
+        if filename:
             try:
-                re_result = re.findall(regexp, path)
+                re_result = re.findall(self.resp_regexp, filename)
             except:
                 self.regexpRespResultText.clear()
             else:
@@ -267,16 +287,23 @@ class ImageRecognizerSetup(QDialog):
                     self.regexpRespResultText.clear()
 
     def set_side_regexp(self, t):
-        regexp = self.regexpSideText.text()
-        path = self.filePathText.text().split('/')[-1]
-        if path:
+        self.side_regexp = self.regexpSideText.text()
+        path = self.filePathText.text()
+        filename = os.path.basename(path)
+        if filename:
             try:
-                re_result = re.findall(regexp, path)
+                re_result = re.findall(self.side_regexp, filename)
             except:
                 self.regexpSideResultText.clear()
             else:
                 if len(re_result) == 1:
-                    self.regexpSideResultText.setText(re_result[0])
+                    side = re_result[0]
+                    self.regexpSideResultText.setText(side)
+                    self.ir_settings['Regions'][side] = {}
+                    if 'Example_paths' in self.ir_settings:
+                        self.ir_settings['Example_paths'][side] = path
+                    else:
+                        self.ir_settings['Example_paths'] = {side: path}
                 else:
                     self.regexpSideResultText.clear()
 
@@ -286,31 +313,51 @@ class ImageRecognizerSetup(QDialog):
     def delete_last_rect(self):
         if self.mark_collection:
             mark = self.mark_collection.pop()
-            self.graphicsScene.removeItem(mark[1])
+            self.graphicsScene.removeItem(mark)
+            return mark
 
     def delete_all_rect(self):
         for i in range(len(self.mark_collection)):
             mark = self.mark_collection.pop()
-            self.graphicsScene.removeItem(mark[1])
+            self.graphicsScene.removeItem(mark)
 
     def marking_process(self, state):
         self.draw_mode = state
         if state:
             self.delete_all_rect()
-        else:
-            result = {}
-            result['regions'] = [mark[1].rect().toRect().getCoords() for mark in self.mark_collection]
-            result['side'] = self.regexpSideResultText.text()
+        else:            
             table_name = self.sender().table_name
             column_name = self.sender().column_name
-            if column_name:
-                self.ir_settings[table_name+'>'+column_name] = result
+            cols = self.sender().cols
+            rows = self.sender().rows
+            doneFlag = False
+            side = self.regexpSideResultText.text()
+            if cols*rows == len(self.mark_collection):
+                self.mark_collection.reverse()
+                for icol in range (cols):
+                    for irow in range (rows):
+                        mark = self.delete_last_rect()
+                        coords = mark.rect().toRect().getCoords()
+                        region = (coords[:2], coords[-2:])
+                        row_name = '%03d'%(irow+1)
+                        if cols > 1:
+                            item_name = '>'.join([table_name, column_name+'_%02d'%(icol+1), row_name]) 
+                        else:
+                            item_name = '>'.join([table_name, column_name, row_name])
+                        self.ir_settings['Regions'][side][item_name] = region
             else:
-                self.ir_settings[table_name] = result
+                QMessageBox.warning(self, 'Ошибка', 'Введено неверное количество отметок', QMessageBox.Ok)
+            self.draw_mode = False
+            self.sender().setChecked(False)
             self.update_settings_view()
 
     def update_settings_view(self):
-        self.textEdit.setText(str(self.ir_settings))  
+        text = str(self.ir_settings['Regions']).replace('},', '},\n\n\n')
+        text = text.replace(')),', ')),\n')
+        text = text.replace(': {', ': {\n')
+        for i in re.findall(r"'[RQ].+001", text):
+            text = text.replace(i, '\n'+i)
+        self.textEdit.setText(text) 
 
     def init_question_info(self):
         for q in self.data_structure:
@@ -325,6 +372,9 @@ class ImageRecognizerSetup(QDialog):
             lbl2.setWordWrap(True)
             btn = QPushButton('Поставить отметки по вопросу')
             btn.table_name = q[0]
+            btn.question = q[1]
+            btn.rows = q[2]
+            btn.cols = q[3]
             btn.column_name = q[4]
             btn.toggled.connect(self.marking_process)
             btn.setCheckable(True)
@@ -340,8 +390,8 @@ class ImageRecognizerSetup(QDialog):
                 name = item['table_name']
                 question = item['quest']
                 rows = len(item['answers'])
-                cols = len(item.get('answer_options', [1]))
-                col_name = item.get('table_column', None)
+                cols = len(item['answer_options']) if item['answer_options'] else 1
+                col_name = item['table_column'] if item['table_column'] else 'AnswerText'
                 self.data_structure.append((name, question, rows, cols, col_name))
 
     def selectFile(self):
@@ -357,7 +407,7 @@ class ImageRecognizerSetup(QDialog):
             point = self.graphicsView.mapToScene(e.pos())
             rect = self.graphicsScene.addRect(point.x()-self.rect_size/2, point.y()-self.rect_size/2, 
                                             self.rect_size, self.rect_size, self.pen)
-            self.mark_collection.append((point, rect))
+            self.mark_collection.append(rect)
 
 
 class ImportCSVDialog(QDialog):
@@ -491,6 +541,10 @@ class MainApp(QMainWindow):
         self.importCSVButton.clicked.connect(self.importCSV_clicked)
         self.IRSetupButton.clicked.connect(self.IRSetup_clicked)
         self.IRProcess.clicked.connect(self.IRProcess_clicked)
+        self.IRCamProcess.clicked.connect(self.IRCamProcess_clicked)
+        self.fieldThresholdSlider.valueChanged.connect(self.fieldThresholdSlider_changed)
+        self.exportExcelButton.clicked.connect(self.exportExcelButton_clicked)
+        self.exportImagesButton.clicked.connect(self.exportImagesButton_clicked)
 
         #горячие клавиши
         next_form_shortcut = QShortcut(QKeySequence(Qt.Key_Up), self)
@@ -498,19 +552,53 @@ class MainApp(QMainWindow):
         previous_form_shortcut = QShortcut(QKeySequence(Qt.Key_Down), self)
         previous_form_shortcut.activated.connect(self.currentForm.stepDown)
 
-    def IRProcess_clicked(self):
-        path = QFileDialog.getOpenFileName(self, 'Изображение', '.', "(*.jpg)")[0]
+    def exportImagesButton_clicked(self):
+        path = QFileDialog.getExistingDirectory(self)
         if path:
-            self.process_image(path)
+            data_export.to_images(self.DB.connection, self.PROJECT['STRUCTURE'], path)
+
+    def exportExcelButton_clicked(self):
+        path = QFileDialog.getSaveFileName(self, 'Файл Excel', '.', "(*.xlsx)")[0]
+        if path:
+            data_export.to_excel(self.DB.connection, self.PROJECT['STRUCTURE'], path)
+
+    def fieldThresholdSlider_changed(self, value):
+        self.fieldThresholdLabel.setNum(value)
+        if self.PROJECT.get('IR_SETTINGS',None):
+            self.PROJECT['IR_SETTINGS']['Fill_threshold'] = value
+
+
+    def IRCamProcess_clicked(self):
+        raw_values = {}
+        if self.PROJECT.get('IR_SETTINGS', {}).get('Regions', None):
+            side_keys = sorted(self.PROJECT['IR_SETTINGS']['Regions'].keys())
+            side_dialog = IRSideChoice(self, side_keys)
+            side = side_dialog.side
+            if side:                
+                recognizer = ImageRecognizer(
+                    example_path=self.PROJECT['IR_SETTINGS']['Example_paths'][side],
+                    regions=self.PROJECT['IR_SETTINGS']['Regions'][side],
+                    field_size=self.PROJECT['IR_SETTINGS']['Field_size'],
+                    fill_threshold=self.PROJECT['IR_SETTINGS']['Fill_threshold']
+                    )
+                ret = recognizer.start_capturing()
+                if ret: 
+                    raw_values= recognizer.get_values()
+        else:
+            QMessageBox.warning(self, "Ошибка", "Не задан файл-конфиг для распознания", QMessageBox.Ok)
+
+    def IRProcess_clicked(self):
+        if 'IR_SETTINGS' in self.PROJECT:
+            path = QFileDialog.getOpenFileName(self, 'Изображение', '.', "(*.jpg)")[0]
+            if path:
+                self.process_image(path)
+        else:
+            QMessageBox.warning(self, "Ошибка", "Не задан файл-конфиг для распознания", QMessageBox.Ok)
 
     def IRSetup_clicked(self):
-        dialog = ImageRecognizerSetup(self, self.ir_settings)
+        dialog = ImageRecognizerSetup(self, self.PROJECT.get('IR_SETTINGS', None))
         if dialog:
-            self.ir_settings = dialog.ir_settings
-            self.ir_settings_additional = {
-                                'Respondent_re': dialog.resp_regexp,
-                                'Side_re': dialog.side_regexp,
-                                }
+            self.PROJECT['IR_SETTINGS'] = dialog.ir_settings
         else:
             pass
 
@@ -523,54 +611,53 @@ class MainApp(QMainWindow):
         self.update_window()
 
     def process_image(self, path):
-        # Считывает данные с изображения по заранее заготовленному
-        # конфигу, хранящемся в self.ir_settings
         raw_values = {}
-        if self.ir_settings:
-            side = re.findall(self.ir_settings_additional['Side_re'], path.split('/')[-1])[0]
-            resp_id = re.findall(self.ir_settings_additional['Respondent_re'], path.split('/')[-1])[0]
-            resp_id = int(resp_id)
-            raw_values['Respondents>RespondentId'] = resp_id            
-            for table_name, settings in self.ir_settings.items():
-                if settings['side'] == side:
-                    recognizer = ImageRecognizer(src_path=path, example_path="2rd stage\example_image\B.jpg", regions=settings['regions'])
-                    raw_values[table_name] = recognizer.get_values()
-            print (raw_values)
+        side = re.findall(self.PROJECT['IR_SETTINGS']['Side_re'], os.path.basename(path))[0]
+        resp_id = re.findall(self.PROJECT['IR_SETTINGS']['Respondent_re'], os.path.basename(path))[0]
+        resp_id = int(resp_id)
+        raw_values['Respondents>RespondentId'] = resp_id            
+        if side in self.PROJECT['IR_SETTINGS']['Regions']:
+            recognizer = ImageRecognizer(
+                src_path=path, 
+                example_path=self.PROJECT['IR_SETTINGS']['Example_paths'][side], 
+                regions=self.PROJECT['IR_SETTINGS']['Regions'][side],
+                field_size=self.PROJECT['IR_SETTINGS']['Field_size'],
+                fill_threshold=self.PROJECT['IR_SETTINGS']['Fill_threshold']
+                )
+            raw_values= recognizer.get_values()
             self.process_recognized_values(raw_values)
         else:
-            QMessageBox.warning(self, "Ошибка", "Не задан файл-конфиг для распознания", QMessageBox.Ok)
+            QMessageBox.warning(self, "Ошибка", "Не определена сторона листа", QMessageBox.Ok)
+
 
     def process_recognized_values(self, raw_values):
-        result_values = {}
-        for key in raw_values:
-            value = raw_values[key]
-            if '>' in key:
-                table_name, table_column = key.split('>')
-                if result_values.get(table_name, None) == None:
-                    result_values[table_name] = {}
+        values = {k.split('>')[0]:[] for k in raw_values}
+        for v in raw_values:
+            v = v.split('>')
+            table_name = v[0]
+            column_name = v[1]
+            col = re.findall(r'\d+', column_name)
+            if col:
+                col = int(col[0])-1
+            row = int(v[2])-1
+            if table_name=='Respondents':
+                values[table_name] = {column_name: self.PROJECT['DEFAULT_VALUES']['Genders'][row+1]}
             else:
-                table_name, table_column = key, None
-            for j in self.PROJECT['STRUCTURE']:
-                # развитие инфы на стандартную схему
-                if j['table_name'] == table_name and j.get('table_column', None) == table_column:
-                    answers = j['answers']
-                    table_type = j['type']
-                    # обычный выбор
-                    if table_type in ('opt', 'mopt'):
-                        v = [answers[i] for i in range(len(value)) if value[i]]
-                    # с другое
-                    elif table_type in ('opt+', 'mopt+'):
-                        v = [(answers[i], 0) for i in range(len(value)) if value[i]]
-                    # матрицы ТРЕБУЕТ РЕАЛИЗАЦИИ
-                    elif table_type in ('matrix', 'mmatrix'):
-                        pass
-                # проверка вложенной инфы типа Respondents
-            if table_column:
-                result_values[table_name][table_column] = v
-            else:
-                result_values[table_name] = v
-        print (result_values)
-        #self.load_values(result_values, False)
+                for i in self.PROJECT['STRUCTURE']:
+                    if i['table_name']==table_name:
+                        string_value = i['answers'][row]
+                        q_type = i['type']
+                        if 'matrix' in q_type and not(values.get(table_name, None)):
+                            values[table_name] = [[] for i in range(len(i['answer_options']))]
+                        if q_type=='opt' or q_type=='mopt':
+                            values[table_name].append(string_value)
+                        elif q_type=='opt+' or q_type=='mopt+':
+                            values[table_name].append((string_value, 0))
+                        elif q_type=='matrix' or q_type=='mmatrix':
+                            values[table_name][col].append(string_value)
+                        break
+        print(values)
+        self.load_values(direct_values=values, reset=False)
 
     def delete_current(self):
         resp_id = self.currentForm.value()
@@ -644,12 +731,12 @@ class MainApp(QMainWindow):
         values['Respondents']['Address'] = self.AddressBox.text()
         if self.AgeBox.text():
             values['Respondents']['Age'] = int(self.AgeBox.text())
-        try:
-            self.DB.set_values(values)
-            self.update_window()
-        except:
-            msg = QMessageBox.warning(self, "Ошибка доступа к базе данных",
-                                        "База данных в данный момент занята, попробуйте позже", QMessageBox.Ok)
+        #try:
+        self.DB.set_values(values)
+        self.update_window()
+        #except:
+        #    msg = QMessageBox.warning(self, "Ошибка доступа к базе данных",
+        #                                "База данных в данный момент занята, попробуйте позже", QMessageBox.Ok)
 
     def reset_current(self):
         self.Stack.currentWidget().reset()
@@ -718,6 +805,7 @@ class MainApp(QMainWindow):
                 self.PROJECT = json.load(file)
                 self.PROJECT['PROJECT_PATH'] = fname
                 self.PROJECT['DATABASE_PATH'] = fname.replace('.trv', '__DB.sqlite')
+                self.saveProject()
                 self.DB = DBController(self.PROJECT)
         else:
             sys.exit()
@@ -735,9 +823,22 @@ class MainApp(QMainWindow):
         else:
             sys.exit()
 
+    def saveProject(self):
+        with open(self.PROJECT['PROJECT_PATH'],'w') as file:
+            json.dump(self.PROJECT, file)
+
+    def closeEvent(self, event):
+        ret = QMessageBox.question(self,'', "Are you sure?", QMessageBox.Yes | QMessageBox.No | QMessageBox.Cancel)
+        if ret == QMessageBox.Yes:
+            self.saveProject()
+            event.accept()
+        elif ret==QMessageBox.No:
+            event.accept()
+        else:
+            event.ignore()
+
 
 if __name__ == '__main__':
-#    os.chdir(os.path.dirname(os.path.abspath(__file__)))
     app = QApplication(sys.argv)
     splash_pix = QPixmap('media/splash.jpg')
     splash = QSplashScreen(splash_pix)
