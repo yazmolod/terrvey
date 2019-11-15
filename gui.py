@@ -470,10 +470,10 @@ class MainApp(QMainWindow):
         resolution = QDesktopWidget().screenGeometry()
         startDialog.move((resolution.width() / 2) - (startDialog.frameSize().width() / 2),
                          (resolution.height() / 2) - (startDialog.frameSize().height() / 2))
-        open_btn = startDialog.buttonBox.button(QDialogButtonBox.Open)
-        save_btn = startDialog.buttonBox.button(QDialogButtonBox.Save)
+        open_btn = startDialog.openButton
+        new_btn = startDialog.newButton
         open_btn.clicked.connect(self.openProjectDialog)
-        save_btn.clicked.connect(self.newProjectDialog)
+        new_btn.clicked.connect(self.newProjectDialog)
         ret = startDialog.exec_()
         if ret == QDialog.Accepted:
             loadUi('ui\\MainWorkflow.ui', self)
