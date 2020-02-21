@@ -1,0 +1,1 @@
+pyuic5 grandkotlovanUI.ui -o grandkotlovanUI.py -x
